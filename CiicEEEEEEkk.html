@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🤍</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #000;
+            font-family: 'Cinzel', serif; /* Daha asil bir font */
+        }
+
+        #loader {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #333;
+            z-index: 999;
+            transition: opacity 2s ease;
+            pointer-events: none;
+        }
+
+        #ui-layer {
+            position: absolute;
+            bottom: 12%;
+            width: 100%;
+            text-align: center;
+            z-index: 10;
+            pointer-events: none;
+            mix-blend-mode: overlay; /* Yazı sahneyle bütünleşsin */
+        }
+
+        h1 {
+            font-weight: 100;
+            font-size: 3rem;
+            color: rgba(255, 255, 255, 0.9);
+            letter-spacing: 1.5rem;
+            margin: 0;
+            opacity: 0;
+            transform: scale(0.9);
+            filter: blur(10px);
+            transition: all 4s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+
+        p {
+            font-size: 0.9rem;
+            color: #e91e63;
+            letter-spacing: 0.3rem;
+            margin-top: 20px;
+            opacity: 0;
+            transition: all 3s ease 2s;
+            text-transform: uppercase;
+        }
+
+        .reveal {
+            opacity: 1 !important;
+            transform: scale(1) !important;
+            filter: blur(0px) !important;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div id="loader">Al Sana Hediye</div>
+
+    <div id="ui-layer">
+        <h1 id="main-text">Al Sana Hediye</h1>
+        
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
+        import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+        // --- AYARLAR ---
+        const SETTINGS = {
+            bloomThreshold: 0.15,
+            bloomStrength: 1.2,
+            bloomRadius: 0.5,
+            focalLength: 120, // Odak uzaklığı
+            focus: 10,       // Odak noktası
+            aperture: 0.0001, // Diyafram (Bulanıklık miktarı)
+            maxblur: 0.015   // Maksimum bulanıklık
+        };
+
+        let scene, camera, renderer, composer;
+        let flowerGroup, materials = [];
+        let particles;
+        const clock = new THREE.Clock();
+
+        // Mouse Etkileşimi
+        let mouse = new THREE.Vector2();
+        let targetRotation = new THREE.Vector2();
+
+        init();
+        animate();
+
+        function init() {
+            // 1. Sahne
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x020002);
+
+            // 2. Kamera
+            camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 2, 13);
+            camera.lookAt(0, 0, 0);
+
+            // 3. Renderer (Ultra Kalite)
+            renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance", stencil: false, depth: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio); // Retina ekran desteği
+            renderer.toneMapping = THREE.CineonToneMapping; // Sinematik renk tonu
+            renderer.toneMappingExposure = 1.0;
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            // 4. Post-Processing Stack (Sıralama Önemli!)
+            const renderPass = new RenderPass(scene, camera);
+
+            // A. Bloom (Parlama)
+            const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+            bloomPass.threshold = SETTINGS.bloomThreshold;
+            bloomPass.strength = SETTINGS.bloomStrength;
+            bloomPass.radius = SETTINGS.bloomRadius;
+
+            // B. Bokeh (Depth of Field - Alan Derinliği)
+            const bokehPass = new BokehPass(scene, camera, {
+                focus: SETTINGS.focus,
+                aperture: SETTINGS.aperture,
+                maxblur: SETTINGS.maxblur,
+                width: window.innerWidth,
+                height: window.innerHeight
+            });
+
+            // C. Renk Düzenleme
+            const outputPass = new OutputPass();
+
+            composer = new EffectComposer(renderer);
+            composer.addPass(renderPass);
+            composer.addPass(bloomPass);
+            composer.addPass(bokehPass);
+            composer.addPass(outputPass);
+
+            // 5. Işıklandırma
+            // Ortam ışığı (Çok az)
+            const ambient = new THREE.AmbientLight(0x220011, 0.5);
+            scene.add(ambient);
+
+            // Ana Işık (Spotlight)
+            const spotLight = new THREE.SpotLight(0xffaad9, 100);
+            spotLight.position.set(5, 10, 5);
+            spotLight.angle = 0.5;
+            spotLight.penumbra = 0.5;
+            spotLight.decay = 2;
+            spotLight.distance = 50;
+            spotLight.castShadow = true;
+            spotLight.shadow.mapSize.width = 2048; // Yüksek çözünürlüklü gölge
+            spotLight.shadow.mapSize.height = 2048;
+            spotLight.shadow.bias = -0.0001;
+            scene.add(spotLight);
+
+            // Arka Işık (Silüet için mavi/mor)
+            const rimLight = new THREE.PointLight(0x00ffff, 5, 20);
+            rimLight.position.set(-5, 2, -5);
+            scene.add(rimLight);
+
+            // Alttan vuran sıcak ışık (Dramatik etki)
+            const bottomLight = new THREE.PointLight(0xff5500, 2, 10);
+            bottomLight.position.set(0, -5, 2);
+            scene.add(bottomLight);
+
+            // 6. Nesneler
+            createHighPolyOrchid();
+            createCinematicDust();
+
+            // Eventler
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('mousemove', onMouseMove);
+
+            // Yükleme ekranı kaldırma
+            setTimeout(() => {
+                const l = document.getElementById('loader');
+                l.style.opacity = 0;
+                setTimeout(() => { 
+                    l.remove(); 
+                    document.getElementById('main-text').classList.add('reveal');
+                    document.getElementById('sub-text').classList.add('reveal');
+                }, 2000);
+            }, 1500);
+        }
+
+        // --- MASTERPIECE ORKİDE OLUŞTURUCU ---
+        function createHighPolyOrchid() {
+            flowerGroup = new THREE.Group();
+            scene.add(flowerGroup);
+
+            // Custom Shader Enjeksiyonu (Standart materyali hack'liyoruz)
+            const modifyShader = (shader) => {
+                shader.uniforms.uTime = { value: 0 };
+                
+                // Vertex Shader'a rüzgar gürültüsü ekle
+                shader.vertexShader = `
+                    uniform float uTime;
+                    ${shader.vertexShader}
+                `.replace(
+                    '#include <begin_vertex>',
+                    `
+                    #include <begin_vertex>
+                    // Basit rüzgar simülasyonu
+                    float theta = sin(uTime + position.y * 0.5) * (0.1 + position.y * 0.05);
+                    transformed.x += sin(uTime * 1.5 + position.y) * 0.05;
+                    transformed.z += cos(uTime * 1.2 + position.x) * 0.05;
+                    
+                    // Yaprak ucu titremesi
+                    if(position.y > 1.0) {
+                        transformed += normal * sin(uTime * 5.0) * 0.02;
+                    }
+                    `
+                );
+                
+                materials.push(shader);
+            };
+
+            // PBR Materyal (Yüksek Kalite)
+            const petalMat = new THREE.MeshPhysicalMaterial({
+                color: 0xd6006e, // Derin fuşya
+                emissive: 0x220011,
+                roughness: 0.45, // Hafif mat
+                metalness: 0.1,
+                reflectivity: 0.5,
+                clearcoat: 0.4, // Üst vernik katmanı
+                clearcoatRoughness: 0.2,
+                sheen: 1.5, // Kadifemsi parlama
+                sheenColor: 0xffaadd,
+                transmission: 0.15, // Işık geçirgenliği
+                thickness: 2.0,
+                side: THREE.DoubleSide
+            });
+
+            // Materyal derlenmeden önce shader'ı değiştir
+            petalMat.onBeforeCompile = modifyShader;
+
+            const centerMat = new THREE.MeshPhysicalMaterial({
+                color: 0xffcc00,
+                emissive: 0xffaa00,
+                emissiveIntensity: 0.5,
+                roughness: 0.3,
+                clearcoat: 0.8
+            });
+
+            // Helper: Organik Yaprak Geometrisi
+            function createPetal(w, h, curveIntensity, isLip = false) {
+                // Segment sayısını artırdık (128x64) -> Çok pürüzsüz kıvrımlar
+                const geo = new THREE.PlaneGeometry(w, h, 64, 64);
+                const pos = geo.attributes.position;
+                
+                for(let i=0; i<pos.count; i++){
+                    const x = pos.getX(i);
+                    const y = pos.getY(i);
+                    const normY = (y + h/2) / h; // 0 ile 1 arası
+                    
+                    // Şekil verme (Merkezden şişirme)
+                    let widthMod = Math.sin(normY * Math.PI);
+                    if(isLip) widthMod = Math.sin(normY * Math.PI) * (1.2 - normY * 0.5);
+                    
+                    pos.setX(i, x * widthMod);
+                    
+                    // Derinlik verme (Kase şekli)
+                    let z = Math.pow(x * 1.5, 2) * curveIntensity;
+                    // Uca doğru geriye kıvırma
+                    z -= Math.pow(normY, 2) * 1.5;
+                    
+                    // Doğal dalgalanma (Random noise benzeri)
+                    z += Math.sin(x * 5) * 0.05 * widthMod;
+                    
+                    pos.setZ(i, z);
+                }
+                
+                geo.computeVertexNormals();
+                geo.translate(0, h * 0.4, 0); // Pivot ayarı
+                return new THREE.Mesh(geo, petalMat);
+            }
+
+            // Yaprakları Dizme
+            // 3 Büyük Dış Yaprak
+            for(let i=0; i<3; i++) {
+                const petal = createPetal(1.8, 4.0, 0.4);
+                petal.rotation.z = (i / 3) * Math.PI * 2;
+                petal.rotation.x = 0.5;
+                petal.castShadow = true;
+                petal.receiveShadow = true;
+                flowerGroup.add(petal);
+            }
+
+            // 2 Yan Yaprak (Daha geniş)
+            for(let i=0; i<2; i++) {
+                const petal = createPetal(2.2, 3.5, 0.3);
+                const dir = i===0 ? 1 : -1;
+                petal.rotation.z = dir * 1.8; // Hafif aşağı sarkık
+                petal.rotation.x = 0.3;
+                petal.position.z = 0.2;
+                petal.castShadow = true;
+                petal.receiveShadow = true;
+                flowerGroup.add(petal);
+            }
+
+            // Merkez Dudak
+            const lip = createPetal(1.5, 2.5, 0.8, true);
+            lip.material = lip.material.clone();
+            lip.material.color.setHex(0x880044); // Daha koyu merkez
+            lip.rotation.z = Math.PI;
+            lip.rotation.x = 0.6;
+            lip.position.z = 0.5;
+            lip.position.y = -0.5;
+            flowerGroup.add(lip);
+
+            // Çiçek Göbeği (Polenler)
+            const pollenGeo = new THREE.SphereGeometry(0.3, 32, 32);
+            const pollen = new THREE.Mesh(pollenGeo, centerMat);
+            pollen.position.z = 0.6;
+            flowerGroup.add(pollen);
+
+            // Sap (Stem)
+            const stemCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0, -0.2, 0),
+                new THREE.Vector3(0.5, -2, -0.5),
+                new THREE.Vector3(2, -6, -2),
+                new THREE.Vector3(2.5, -10, -1)
+            ]);
+            const stemGeo = new THREE.TubeGeometry(stemCurve, 128, 0.12, 16, false);
+            const stemMat = new THREE.MeshStandardMaterial({ color: 0x1b5e20, roughness: 0.7, bumpScale: 0.02 });
+            const stem = new THREE.Mesh(stemGeo, stemMat);
+            stem.castShadow = true;
+            flowerGroup.add(stem);
+        }
+
+        // --- PARTICLE SYSTEM (Tozlar) ---
+        function createCinematicDust() {
+            const count = 3000;
+            const geo = new THREE.BufferGeometry();
+            const pos = [];
+            const scales = [];
+            
+            for(let i=0; i<count; i++) {
+                pos.push((Math.random() - 0.5) * 30);
+                pos.push((Math.random() - 0.5) * 30);
+                pos.push((Math.random() - 0.5) * 20 + 5); // Kameraya yakın
+                scales.push(Math.random());
+            }
+            
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+            geo.setAttribute('scale', new THREE.Float32BufferAttribute(scales, 1));
+            
+            // Tozlar için özel shader materyali (Yumuşak daireler)
+            const mat = new THREE.ShaderMaterial({
+                uniforms: {
+                    color: { value: new THREE.Color(0xffffff) },
+                    uTime: { value: 0 }
+                },
+                vertexShader: `
+                    attribute float scale;
+                    uniform float uTime;
+                    varying float vAlpha;
+                    void main() {
+                        vec3 p = position;
+                        p.y += sin(uTime * 0.5 + position.x) * 0.5; // Yavaşça süzülme
+                        vec4 mvPosition = modelViewMatrix * vec4( p, 1.0 );
+                        gl_PointSize = scale * 8.0 * ( 10.0 / - mvPosition.z );
+                        gl_Position = projectionMatrix * mvPosition;
+                        vAlpha = 0.6 + 0.4 * sin(uTime + scale * 10.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform vec3 color;
+                    varying float vAlpha;
+                    void main() {
+                        float r = distance( gl_PointCoord, vec2(0.5) );
+                        if ( r > 0.5 ) discard;
+                        float glow = 1.0 - (r * 2.0);
+                        glow = pow(glow, 2.0); // Soft edge
+                        gl_FragColor = vec4( color, vAlpha * glow );
+                    }
+                `,
+                transparent: true,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending
+            });
+            
+            particles = new THREE.Points(geo, mat);
+            scene.add(particles);
+        }
+
+        function onMouseMove(event) {
+            // Mouse pozisyonunu -1 ile 1 arasına normalize et
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const time = clock.getElapsedTime();
+
+            // 1. Shader Uniform Güncelleme (Rüzgar Animasyonu)
+            materials.forEach(m => {
+                if(m.uniforms && m.uniforms.uTime) {
+                    m.uniforms.uTime.value = time;
+                }
+            });
+
+            if(particles) particles.material.uniforms.uTime.value = time;
+
+            // 2. Fiziksel Çiçek Hareketi
+            targetRotation.x = mouse.y * 0.2;
+            targetRotation.y = mouse.x * 0.2;
+
+            // Smooth Damp (Yumuşak geçiş)
+            flowerGroup.rotation.x += (targetRotation.x - flowerGroup.rotation.x) * 0.05;
+            flowerGroup.rotation.y += (targetRotation.y - flowerGroup.rotation.y) * 0.05;
+            
+            // Nefes alma hareketi
+            flowerGroup.position.y = Math.sin(time * 0.5) * 0.2 - 0.5;
+
+            // 3. Sinematik Kamera (Parallax Effect)
+            // Kamera mouse'un tersine hareket ederek derinlik yaratır
+            camera.position.x += (mouse.x * 0.5 - camera.position.x) * 0.03;
+            camera.position.y += (mouse.y * 0.5 + 2 - camera.position.y) * 0.03;
+            camera.lookAt(0, 0, 0);
+
+            // 4. Render
+            composer.render();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
